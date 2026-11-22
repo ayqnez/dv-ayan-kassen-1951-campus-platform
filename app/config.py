@@ -8,6 +8,8 @@ import os
 from dataclasses import dataclass
 from urllib.parse import quote
 
+from .security import DEFAULT_MIN_LENGTH
+
 
 class ConfigError(Exception):
     pass
@@ -35,6 +37,7 @@ class Settings:
     log_level: str
     log_format: str
     password_min_length: int
+    password_require_symbol: bool = False
 
     @property
     def db_engine(self) -> str:
@@ -73,8 +76,18 @@ def load_settings() -> Settings:
     if not bucket:
         raise ConfigError(f"BUCKET is required for STORAGE_BACKEND={backend}")
 
+    try:
+        min_length = int(env("PASSWORD_MIN_LENGTH", str(DEFAULT_MIN_LENGTH)))
+    except ValueError as exc:
+        raise ConfigError("PASSWORD_MIN_LENGTH must be a positive integer") from exc
+    if min_length < 1:
+        raise ConfigError("PASSWORD_MIN_LENGTH must be a positive integer")
+    require_symbol = (env("PASSWORD_REQUIRE_SYMBOL", "false") or "").strip().lower()
+    if require_symbol not in {"true", "false"}:
+        raise ConfigError("PASSWORD_REQUIRE_SYMBOL must be true or false")
+
     return Settings(
-        app_name=env("APP_NAME", "campus-app"),
+        app_name=env("APP_NAME", "Scholarship applications"),
         app_owner=env("APP_OWNER", "unknown student"),
         app_version=env("APP_VERSION", "dev"),
         git_sha=env("GIT_SHA", ""),
@@ -85,5 +98,6 @@ def load_settings() -> Settings:
         secret_key=secret_key,
         log_level=(env("LOG_LEVEL", "INFO") or "INFO").upper(),
         log_format=(env("LOG_FORMAT", "json") or "json").lower(),
-        password_min_length=int(env("PASSWORD_MIN_LENGTH", "12") or 12),
+        password_min_length=min_length,
+        password_require_symbol=require_symbol == "true",
     )
