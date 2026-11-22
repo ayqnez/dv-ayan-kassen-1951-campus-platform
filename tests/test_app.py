@@ -27,19 +27,23 @@ def test_health_and_ready(client):
 
 
 def test_home_and_info_show_owner(client):
-    assert "Test Student 123" in client.get("/").text
+    home = client.get("/").text
+    assert "Test Student 123" in home
+    assert "Scholarship applications" in home
     info = client.get("/info").json()
     assert info["owner"] == "Test Student 123"
+    assert info["app"] == "Scholarship applications"
     assert info["db_engine"] == "sqlite"
 
 
 def test_items_crud(client):
-    r = client.post("/api/items", json={"title": "Lab 1", "description": "docker"})
+    title = "Merit scholarship application"
+    r = client.post("/api/items", json={"title": title, "description": "Fall semester"})
     assert r.status_code == 201
     item_id = r.json()["id"]
-    assert client.get(f"/api/items/{item_id}").json()["title"] == "Lab 1"
-    r = client.put(f"/api/items/{item_id}", json={"title": "Lab 1 v2"})
-    assert r.json()["title"] == "Lab 1 v2"
+    assert client.get(f"/api/items/{item_id}").json()["title"] == title
+    r = client.put(f"/api/items/{item_id}", json={"title": title, "description": "Spring semester"})
+    assert r.json()["description"] == "Spring semester"
     assert len(client.get("/api/items").json()) == 1
     assert client.delete(f"/api/items/{item_id}").status_code == 204
     assert client.get(f"/api/items/{item_id}").status_code == 404
@@ -66,6 +70,38 @@ def test_password_checker(client):
     assert weak["rules"]["not_common"] is False
     assert check_password("Str0ng!Passw0rd#2026")["ok"] is True
     assert check_password("Short1!", min_length=12)["rules"]["min_length"] is False
+
+
+@pytest.mark.parametrize(
+    ("password", "accepted"),
+    [
+        ("Scholar2026Award", True),
+        ("Scholar2026Awar", False),
+        ("scholar2026award", False),
+        ("SCHOLAR2026AWARD", False),
+        ("ScholarshipsAward", False),
+    ],
+)
+def test_scholarship_password_policy(client, password, accepted):
+    result = client.post("/api/admin/check-password", json={"password": password}).json()
+    assert result["min_length"] == 16
+    assert result["require_symbol"] is False
+    assert result["rules"]["has_symbol"] is False
+    assert result["ok"] is accepted
+
+
+def test_password_policy_configurable(tmp_path, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", GOOD_KEY)
+    monkeypatch.setenv("DB_URL", "sqlite://")
+    monkeypatch.setenv("BUCKET", str(tmp_path / "uploads"))
+    monkeypatch.setenv("PASSWORD_MIN_LENGTH", "17")
+    monkeypatch.setenv("PASSWORD_REQUIRE_SYMBOL", "true")
+    with TestClient(create_app()) as client:
+        result = client.post("/api/admin/check-password", json={"password": "Scholar2026Awards"}).json()
+        assert result["min_length"] == 17
+        assert result["require_symbol"] is True
+        assert result["ok"] is False
+        assert client.post("/api/admin/check-password", json={"password": "Scholar2026Award!"}).json()["ok"] is True
 
 
 def test_secret_key_required(monkeypatch):

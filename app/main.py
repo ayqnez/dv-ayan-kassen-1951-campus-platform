@@ -1,4 +1,4 @@
-"""campus-app HTTP API (FastAPI)."""
+"""Scholarship applications HTTP API (FastAPI)."""
 
 import html
 import logging
@@ -26,8 +26,8 @@ HOSTNAME = socket.gethostname()
 
 
 class ItemIn(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    description: str = Field(default="", max_length=5000)
+    title: str = Field(min_length=1, max_length=200, description="Scholarship application title")
+    description: str = Field(default="", max_length=5000, description="Scholarship application details")
 
 
 class ItemOut(ItemIn):
@@ -73,7 +73,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.engine.dispose()
         log.info("stopped", extra={"event": "shutdown"})
 
-    app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+    app = FastAPI(
+        title=settings.app_name,
+        description="Manage scholarship applications and their supporting documents.",
+        version=settings.app_version,
+        lifespan=lifespan,
+    )
 
     @app.middleware("http")
     async def observe(request: Request, call_next):
@@ -107,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return (
             f"<!doctype html><title>{html.escape(settings.app_name)}</title>"
             f"<h1>{html.escape(settings.app_name)}</h1>"
+            '<p><a href="/docs">Scholarship application API</a></p>'
             f"<p>Owner: <b>{html.escape(settings.app_owner)}</b></p>"
             f"<p>Version {html.escape(settings.app_version)} · served by {html.escape(HOSTNAME)}</p>"
         )
@@ -212,7 +218,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/admin/check-password")
     def password_policy(body: PasswordIn):
-        return check_password(body.password, settings.password_min_length)
+        return check_password(body.password, settings.password_min_length, settings.password_require_symbol)
 
     return app
 
